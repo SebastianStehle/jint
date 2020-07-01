@@ -155,7 +155,7 @@ namespace Jint.Runtime.Interpreter.Expressions
 
             if ((typeX & InternalTypes.String) != 0)
             {
-                return x.AsStringWithoutTypeCheck() == y.AsStringWithoutTypeCheck();
+                return x.ToString() == y.ToString();
             }
 
             if (typeX == InternalTypes.Boolean)
@@ -415,7 +415,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                     return ExceptionHelper.ThrowTypeError<JsValue>(_engine, "in can only be used with an object");
                 }
 
-                return oi.HasProperty(TypeConverter.ToJsString(left)) ? JsBoolean.True : JsBoolean.False;
+                return oi.HasProperty(left) ? JsBoolean.True : JsBoolean.False;
             }
         }
 

@@ -3,41 +3,29 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
-using Jint.Constraints;
 using Jint.Native;
 using Jint.Native.Object;
 using Jint.Runtime.Interop;
+using Jint.Runtime.References;
 
 namespace Jint
 {
     public sealed class Options
     {
         private readonly List<IConstraint> _constraints = new List<IConstraint>();
-        private bool _discardGlobal;
         private bool _strict;
         private bool _allowDebuggerStatement;
         private bool _allowClr;
         private bool _allowClrWrite = true;
         private readonly List<IObjectConverter> _objectConverters = new List<IObjectConverter>();
-        private Func<object, ObjectInstance> _wrapObjectHandler;
+        private Func<Engine, object, ObjectInstance> _wrapObjectHandler;
         private int _maxRecursionDepth = -1;
         private TimeSpan _regexTimeoutInterval = TimeSpan.FromSeconds(10);
         private CultureInfo _culture = CultureInfo.CurrentCulture;
         private TimeZoneInfo _localTimeZone = TimeZoneInfo.Local;
         private List<Assembly> _lookupAssemblies = new List<Assembly>();
         private Predicate<Exception> _clrExceptionsHandler;
-        private IReferenceResolver _referenceResolver;
-
-        /// <summary>
-        /// When called, doesn't initialize the global scope.
-        /// Can be useful in lightweight scripts for performance reason.
-        /// </summary>
-        public Options DiscardGlobal(bool discard = true)
-        {
-            _discardGlobal = discard;
-            return this;
-        }
+        private IReferenceResolver _referenceResolver = DefaultReferenceResolver.Instance;
 
         /// <summary>
         /// Run the script in strict mode.
@@ -71,6 +59,14 @@ namespace Jint
         }
 
         /// <summary>
+        /// Adds a <see cref="IObjectConverter"/> instance to convert CLR types to <see cref="JsValue"/>
+        /// </summary>
+        public Options AddObjectConverter<T>() where T : IObjectConverter, new()
+        {
+            return AddObjectConverter(new T());
+        }
+
+        /// <summary>
          /// Adds a <see cref="IObjectConverter"/> instance to convert CLR types to <see cref="JsValue"/>
         /// </summary>
         public Options AddObjectConverter(IObjectConverter objectConverter)
@@ -84,7 +80,7 @@ namespace Jint
         /// ObjectInstance using class ObjectWrapper. This function can be used to
         /// register a handler for a customized handling.
         /// </summary>
-        public Options SetWrapObjectHandler(Func<object, ObjectInstance> wrapObjectHandler)
+        public Options SetWrapObjectHandler(Func<Engine, object, ObjectInstance> wrapObjectHandler)
         {
             _wrapObjectHandler = wrapObjectHandler;
             return this;
@@ -129,56 +125,18 @@ namespace Jint
             return this;
         }
 
-        public Options MaxStatements(int maxStatements = 0)
-        {
-            _constraints.RemoveAll(x => x is MaxStatements);
-            
-            if (maxStatements > 0 && maxStatements < int.MaxValue)
-            {
-                _constraints.Add(new MaxStatements(maxStatements));
-            }
-            return this;
-        }
-
-        public Options LimitMemory(long memoryLimit)
-        {
-            _constraints.RemoveAll(x => x is MemoryLimit);
-
-            if (memoryLimit > 0 && memoryLimit < int.MaxValue)
-            {
-                _constraints.Add(new MemoryLimit(memoryLimit));
-            }
-            return this;
-        }
-
-        public Options TimeoutInterval(TimeSpan timeoutInterval)
-        {
-            _constraints.RemoveAll(x => x is TimeConstraint);
-
-            if (timeoutInterval > TimeSpan.Zero && timeoutInterval < TimeSpan.MaxValue)
-            {
-                _constraints.Add(new TimeConstraint2(timeoutInterval));
-            }
-            return this;
-        }
-
-        public Options CancellationToken(CancellationToken cancellationToken)
-        {
-            _constraints.RemoveAll(x => x is CancellationConstraint);
-
-            if (cancellationToken != default)
-            {
-                _constraints.Add(new CancellationConstraint(cancellationToken));
-            }
-            return this;
-        }
-
         public Options Constraint(IConstraint constraint)
         {
             if (constraint != null)
             {
                 _constraints.Add(constraint);
             }
+            return this;
+        }
+
+        public Options WithoutConstraint(Predicate<IConstraint> predicate)
+        {
+            _constraints.RemoveAll(predicate);
             return this;
         }
 
@@ -221,8 +179,6 @@ namespace Jint
             return this;
         }
 
-        internal bool _IsGlobalDiscarded => _discardGlobal;
-
         internal bool IsStrict => _strict;
 
         internal bool _IsDebuggerStatementAllowed => _allowDebuggerStatement;
@@ -241,7 +197,7 @@ namespace Jint
 
         internal List<IConstraint> _Constraints => _constraints;
 
-        internal Func<object, ObjectInstance> _WrapObjectHandler => _wrapObjectHandler;
+        internal Func<Engine, object, ObjectInstance> _WrapObjectHandler => _wrapObjectHandler;
 
         internal int MaxRecursionDepth => _maxRecursionDepth;
 
@@ -252,5 +208,36 @@ namespace Jint
         internal TimeZoneInfo _LocalTimeZone => _localTimeZone;
 
         internal IReferenceResolver  ReferenceResolver => _referenceResolver;
+        
+        private sealed class DefaultReferenceResolver : IReferenceResolver
+        {
+            public static readonly DefaultReferenceResolver Instance = new DefaultReferenceResolver();
+            
+            private DefaultReferenceResolver()
+            {
+            }
+
+            public bool TryUnresolvableReference(Engine engine, Reference reference, out JsValue value)
+            {
+                value = JsValue.Undefined;
+                return false;
+            }
+
+            public bool TryPropertyReference(Engine engine, Reference reference, ref JsValue value)
+            {
+                return false;
+            }
+
+            public bool TryGetCallable(Engine engine, object callee, out JsValue value)
+            {
+                value = JsValue.Undefined;
+                return false;
+            }
+
+            public bool CheckCoercible(JsValue value)
+            {
+                return false;
+            }
+        }
     }
 }

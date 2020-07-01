@@ -22,7 +22,7 @@ namespace Jint.Native.Array
         {
             if (capacity < MaxDenseArrayLength)
             {
-                _dense = capacity > 0 ? new PropertyDescriptor[capacity] : System.ArrayExt.Empty<PropertyDescriptor>();
+                _dense = capacity > 0 ? new PropertyDescriptor[capacity] : System.Array.Empty<PropertyDescriptor>();
             }
             else
             {
@@ -38,7 +38,7 @@ namespace Jint.Native.Array
             int length = 0;
             if (items == null || items.Length == 0)
             {
-                _dense = System.ArrayExt.Empty<PropertyDescriptor>();
+                _dense = System.Array.Empty<PropertyDescriptor>();
                 length = 0;
             }
             else
@@ -57,7 +57,7 @@ namespace Jint.Native.Array
             _length = new PropertyDescriptor(length, PropertyFlag.OnlyWritable);
         }
 
-        internal override bool IsArrayLike => true;
+        public override bool IsArrayLike => true;
 
         public override bool DefineOwnProperty(JsValue property, PropertyDescriptor desc)
         {
@@ -648,13 +648,15 @@ namespace Jint.Native.Array
 
         internal void EnsureCapacity(uint capacity)
         {
-            if (capacity <= MaxDenseArrayLength && capacity > (uint) _dense.Length)
+            if (capacity > MaxDenseArrayLength || _dense is null || capacity <= (uint) _dense.Length)
             {
-                // need to grow
-                var newArray = new PropertyDescriptor[capacity];
-                System.Array.Copy(_dense, newArray, _dense.Length);
-                _dense = newArray;
+                return;
             }
+
+            // need to grow
+            var newArray = new PropertyDescriptor[capacity];
+            System.Array.Copy(_dense, newArray, _dense.Length);
+            _dense = newArray;
         }
 
         public IEnumerator<JsValue> GetEnumerator()

@@ -76,7 +76,11 @@ namespace Jint.Native.Reflect
 
         private JsValue DefineProperty(JsValue thisObject, JsValue[] arguments)
         {
-            var o = arguments.As<ObjectInstance>(0, _engine);
+            if (!(arguments.At(0) is ObjectInstance o))
+            {
+                return ExceptionHelper.ThrowTypeError<JsValue>(_engine, "Reflect.defineProperty called on non-object");
+            }
+
             var p = arguments.At(1);
             var name = TypeConverter.ToPropertyKey(p);
 
@@ -140,6 +144,10 @@ namespace Jint.Native.Reflect
 
         private JsValue GetOwnPropertyDescriptor(JsValue thisObject, JsValue[] arguments)
         {
+            if (!arguments.At(0).IsObject())
+            {
+                ExceptionHelper.ThrowTypeError(_engine, "Reflect.getOwnPropertyDescriptor called on non-object");
+            }
             return _engine.Object.GetOwnPropertyDescriptor(Undefined, arguments);
         }
 
@@ -151,13 +159,19 @@ namespace Jint.Native.Reflect
                 return ExceptionHelper.ThrowTypeError<JsValue>(_engine, "Reflect.get called on non-object");
             }
 
-            var keys = o.GetOwnPropertyKeys(Types.String | Types.Symbol);
+            var keys = o.GetOwnPropertyKeys();
             return _engine.Array.CreateArrayFromList(keys);
         }
 
         private JsValue IsExtensible(JsValue thisObject, JsValue[] arguments)
         {
-            return _engine.Object.IsExtensible(Undefined, arguments);
+            var target = arguments.At(0);
+            if (!(target is ObjectInstance o))
+            {
+                return ExceptionHelper.ThrowTypeError<JsValue>(_engine, "Reflect.isExtensible called on non-object");
+            }
+
+            return o.Extensible;
         }
 
         private JsValue PreventExtensions(JsValue thisObject, JsValue[] arguments)

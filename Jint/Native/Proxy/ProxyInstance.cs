@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
-using Jint.Native.Function;
+
 using Jint.Native.Object;
 using Jint.Runtime;
 using Jint.Runtime.Descriptors;
 
 namespace Jint.Native.Proxy
 {
-    public class ProxyInstance : FunctionInstance, IConstructor
+    public class ProxyInstance : ObjectInstance, IConstructor, ICallable
     {
         internal ObjectInstance _target;
         internal ObjectInstance _handler;
@@ -26,18 +26,19 @@ namespace Jint.Native.Proxy
         private static readonly JsString TrapConstruct = new JsString("construct");
 
         private static readonly JsString KeyFunctionRevoke = new JsString("revoke");
+        private static readonly JsString KeyIsArray = new JsString("isArray");
 
         public ProxyInstance(
             Engine engine,
             ObjectInstance target,
             ObjectInstance handler)
-            : base(engine, JsString.Empty, false, ObjectClass.Proxy)
+            : base(engine, target.Class)
         {
             _target = target;
             _handler = handler;
         }
 
-        public override JsValue Call(JsValue thisObject, JsValue[] arguments)
+        public JsValue Call(JsValue thisObject, JsValue[] arguments)
         {
             var jsValues = new[] { _target, thisObject, _engine.Array.Construct(arguments) };
             if (TryCallHandler(TrapApply, jsValues, out var result))
@@ -71,10 +72,7 @@ namespace Jint.Native.Proxy
 
         public override bool IsArray()
         {
-            if (_handler is null)
-            {
-                return ExceptionHelper.ThrowTypeError<bool>(_engine);
-            }
+            AssertNotRevoked(KeyIsArray);
             return _target.IsArray();
         }
 
@@ -183,7 +181,7 @@ namespace Jint.Native.Proxy
 
         public override PropertyDescriptor GetOwnProperty(JsValue property)
         {
-            if (!TryCallHandler(TrapGetOwnPropertyDescriptor, new JsValue[] {_target, property, this}, out var result))
+            if (!TryCallHandler(TrapGetOwnPropertyDescriptor, new[] {_target, property, this}, out var result))
             {
                 return _target.GetOwnProperty(property);
             }
@@ -446,6 +444,8 @@ namespace Jint.Native.Proxy
             return true;
         }
 
+        internal override bool IsCallable => _target is ICallable;
+
         private bool TryCallHandler(JsValue propertyName, JsValue[] arguments, out JsValue result)
         {
             AssertNotRevoked(propertyName);
@@ -466,7 +466,7 @@ namespace Jint.Native.Proxy
             return false;
         }
 
-        internal void AssertNotRevoked(JsValue key)
+        private void AssertNotRevoked(JsValue key)
         {
             if (_handler is null)
             {
@@ -474,12 +474,14 @@ namespace Jint.Native.Proxy
             }
         }
 
-        internal void AssertTargetNotRevoked(JsValue key)
+        private void AssertTargetNotRevoked(JsValue key)
         {
             if (_target is null)
             {
                 ExceptionHelper.ThrowTypeError(_engine, $"Cannot perform '{key}' on a proxy that has been revoked");
             }
         }
+        
+        public override string ToString() => "function () { [native code] }";
     }
 }

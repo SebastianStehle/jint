@@ -202,7 +202,7 @@ namespace Jint.Native
             }
             else
             {
-                iterator = new IteratorInstance.ObjectWrapper(obj);
+                iterator = new IteratorInstance.ObjectIterator(obj);
             }
             return true;
         }
@@ -249,14 +249,7 @@ namespace Jint.Native
 
             return null;
         }
-
-        [Pure]
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Is<T>()
-        {
-            return IsObject() && this is T;
-        }
-
+        
         [Pure]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T As<T>() where T : ObjectInstance
@@ -355,8 +348,8 @@ namespace Jint.Native
 
             // if no known type could be guessed, wrap it as an ObjectInstance
             var h = engine.Options._WrapObjectHandler;
-            ObjectInstance o = h != null ? h(value) : null;
-            return o ?? new ObjectWrapper(engine, value);
+            var o = h?.Invoke(engine, value) ?? new ObjectWrapper(engine, value);
+            return o;
         }
 
         private static JsValue Convert(Engine e, object v)
@@ -420,6 +413,8 @@ namespace Jint.Native
             return callable.Call(v, arguments);
         }
 
+        public virtual bool HasOwnProperty(JsValue property) => false;
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public JsValue Get(JsValue property)
         {
@@ -435,7 +430,7 @@ namespace Jint.Native
         }
 
         /// <summary>
-        /// http://www.ecma-international.org/ecma-262/#sec-ordinary-object-internal-methods-and-internal-slots-set-p-v-receiver
+        /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-set-p-v-receiver
         /// </summary>
         public virtual bool Set(JsValue property, JsValue value, JsValue receiver)
         {
@@ -566,7 +561,7 @@ namespace Jint.Native
                         Value = ((JsBoolean) value)._value + " (bool)";
                         break;
                     case Types.String:
-                        Value = value.AsStringWithoutTypeCheck() + " (string)";
+                        Value = value.ToString() + " (string)";
                         break;
                     case Types.Number:
                         Value = ((JsNumber) value)._value + " (number)";
@@ -601,11 +596,13 @@ namespace Jint.Native
         {
             return this;
         }
+        
+        internal virtual bool IsCallable => this is ICallable;
 
         internal static bool SameValue(JsValue x, JsValue y)
         {
-            var typea = TypeConverter.GetInternalPrimitiveType(x);
-            var typeb = TypeConverter.GetInternalPrimitiveType(y);
+            var typea = x.Type;
+            var typeb = y.Type;
 
             if (typea != typeb)
             {
@@ -644,8 +641,13 @@ namespace Jint.Native
                     return TypeConverter.ToString(x) == TypeConverter.ToString(y);
                 case Types.Boolean:
                     return TypeConverter.ToBoolean(x) == TypeConverter.ToBoolean(y);
-                default:
+                case Types.Undefined:
+                case Types.Null:
+                    return true;
+                case Types.Symbol:
                     return x == y;
+                default:
+                    return ReferenceEquals(x, y);
             }
         }
     }

@@ -1,4 +1,3 @@
-using System;
 using Esprima.Ast;
 using Jint.Native;
 using Jint.Native.Function;
@@ -34,7 +33,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                 JintArguments = new JintExpression[expression.Arguments.Count]
             };
 
-            bool CanSpread(INode e)
+            bool CanSpread(Node e)
             {
                 return e?.Type == Nodes.SpreadElement
                     || e is AssignmentExpression ae && ae.Right?.Type == Nodes.SpreadElement;
@@ -43,9 +42,9 @@ namespace Jint.Runtime.Interpreter.Expressions
             bool cacheable = true;
             for (var i = 0; i < expression.Arguments.Count; i++)
             {
-                var expressionArgument = (Expression) expression.Arguments[i];
+                var expressionArgument = expression.Arguments[i];
                 cachedArgumentsHolder.JintArguments[i] = Build(_engine, expressionArgument);
-                cacheable &= expressionArgument is Literal;
+                cacheable &= expressionArgument.Type == Nodes.Literal;
                 _hasSpreads |= CanSpread(expressionArgument);
                 if (expressionArgument is ArrayExpression ae)
                 {
@@ -59,7 +58,7 @@ namespace Jint.Runtime.Interpreter.Expressions
             if (cacheable)
             {
                 _cached = true;
-                var arguments = ArrayExt.Empty<JsValue>();
+                var arguments = System.Array.Empty<JsValue>();
                 if (cachedArgumentsHolder.JintArguments.Length > 0)
                 {
                     arguments = new JsValue[cachedArgumentsHolder.JintArguments.Length];
@@ -85,7 +84,7 @@ namespace Jint.Runtime.Interpreter.Expressions
             // todo: implement as in http://www.ecma-international.org/ecma-262/5.1/#sec-11.2.4
 
             var cachedArguments = _cachedArguments;
-            var arguments = ArrayExt.Empty<JsValue>();
+            var arguments = System.Array.Empty<JsValue>();
             if (_cached)
             {
                 arguments = cachedArguments.CachedArguments;
@@ -130,10 +129,9 @@ namespace Jint.Runtime.Interpreter.Expressions
 
             if (!func.IsObject())
             {
-                if (_engine._referenceResolver == null || !_engine._referenceResolver.TryGetCallable(_engine, callee, out func))
+                if (!_engine._referenceResolver.TryGetCallable(_engine, callee, out func))
                 {
-                    ExceptionHelper.ThrowTypeError(_engine,
-                        r == null ? "" : $"Property '{r.GetReferencedName()}' of object is not a function");
+                    ExceptionHelper.ThrowTypeError(_engine, r == null ? "" : $"Property '{r.GetReferencedName()}' of object is not a function");
                 }
             }
 
@@ -149,7 +147,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                 var baseValue = r.GetBase();
                 if ((baseValue._type & InternalTypes.ObjectEnvironmentRecord) == 0)
                 {
-                    thisObject = baseValue;
+                    thisObject = r.GetThisValue();
                 }
                 else
                 {

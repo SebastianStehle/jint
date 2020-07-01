@@ -55,7 +55,7 @@ namespace Jint.Native.String
                 return PropertyDescriptor.Undefined;
             }
 
-            var str = PrimitiveValue.AsStringWithoutTypeCheck();
+            var str = PrimitiveValue.ToString();
             var number = TypeConverter.ToNumber(property);
             if (!IsInt32(number, out var index) || index < 0 || index >= str.Length)
             {
@@ -76,6 +76,22 @@ namespace Jint.Native.String
             {
                 yield return entry;
             }
+        }
+
+        public override List<JsValue> GetOwnPropertyKeys(Types types)
+        {
+            var keys = new List<JsValue>(PrimitiveValue.Length + 1);
+            for (uint i = 0; i < PrimitiveValue.Length; ++i)
+            {
+                keys.Add(JsString.Create(i));
+            }
+
+            keys.AddRange(base.GetOwnPropertyKeys(types));
+            keys.Sort((v1, v2) => TypeConverter.ToNumber(v1).CompareTo(TypeConverter.ToNumber(v2)));
+
+            keys.Add(JsString.LengthString);
+
+            return keys;
         }
 
         protected internal override void SetOwnProperty(JsValue property, PropertyDescriptor desc)

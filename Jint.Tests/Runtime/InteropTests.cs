@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -136,7 +138,7 @@ namespace Jint.Tests.Runtime
             var del = System.Linq.Expressions.Expression.Lambda(exp, parameters).Compile();
 
             _engine.SetValue("add", del);
-            
+
             RunTest(@"
                 assert(add(1,1) === 2);
             ");
@@ -631,11 +633,23 @@ namespace Jint.Tests.Runtime
             ");
         }
 
+        private struct TestStruct
+        {
+            public int Value;
+
+            public TestStruct(int value)
+            {
+                Value = value;
+            }
+        }
+
         private class TestClass
         {
             public int? NullableInt { get; set; }
             public DateTime? NullableDate { get; set; }
             public bool? NullableBool { get; set; }
+            public TestEnumInt32? NullableEnum { get; set; }
+            public TestStruct? NullableStruct { get; set; }
         }
 
         [Fact]
@@ -643,16 +657,88 @@ namespace Jint.Tests.Runtime
         {
             var instance = new TestClass();
             _engine.SetValue("instance", instance);
+            _engine.SetValue("TestStruct", typeof(TestStruct));
 
             RunTest(@"
                 instance.NullableInt = 2;
                 instance.NullableDate = new Date();
                 instance.NullableBool = true;
+                instance.NullableEnum = 1;
+                instance.NullableStruct = new TestStruct(5);
 
                 assert(instance.NullableInt===2);
                 assert(instance.NullableDate!=null);
                 assert(instance.NullableBool===true);
+                assert(instance.NullableEnum===1);
+                assert(instance.NullableStruct.Value===5);
             ");
+        }
+
+        private class ReadOnlyList : IReadOnlyList<Person>
+        {
+            private readonly Person[] _data;
+
+            public ReadOnlyList(params Person[] data)
+            {
+                _data = data;
+            }
+
+            public IEnumerator<Person> GetEnumerator()
+            {
+                return ((IEnumerable<Person>) _data).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return _data.GetEnumerator();
+            }
+
+            public int Count => _data.Length;
+
+            public Person this[int index] => _data[index];
+        }
+        
+        [Fact]
+        public void CanAddArrayPrototypeForArrayLikeClrObjects()
+        {
+            var e = new Engine(cfg => cfg
+                .AllowClr(typeof(Person).Assembly)
+                .SetWrapObjectHandler((engine, target) =>
+                {
+                    var instance = new ObjectWrapper(engine, target);
+                    if (instance.IsArrayLike)
+                    {
+                        instance.SetPrototypeOf(engine.Array.PrototypeObject);
+                    }
+                    return instance;
+                })
+            );
+
+            var person = new Person
+            {
+                Age = 12,
+                Name = "John"
+            };
+            
+            dynamic obj = new
+            {
+                values = new ReadOnlyList(person)
+            };
+
+            e.SetValue("o", obj);
+
+            var name = e.Execute("o.values.filter(x => x.age == 12)[0].name").GetCompletionValue().ToString();
+            Assert.Equal("John", name);
+        }
+        
+        [Fact]
+        public void CanAccessExpandoObject()
+        {
+            var engine = new Engine();
+            dynamic expando = new ExpandoObject();
+            expando.Name = "test";
+            engine.SetValue("expando", expando);
+            Assert.Equal("test", engine.Execute("expando.Name").GetCompletionValue().ToString());
         }
 
         [Fact]
@@ -1464,8 +1550,23 @@ namespace Jint.Tests.Runtime
             ");
         }
 
+        private class FailingObject2
+        {
+            public int this[int index] => throw new ArgumentException("index is bad", nameof(index));
+        }
+
         [Fact]
-        public void ShouldAutomaticallyConvertArraysToFindBestInteropResulution()
+        public void ShouldPropagateIndexerExceptions()
+        {
+            var engine = new Engine();
+            engine.Execute(@"function f2(obj) { return obj[1]; }");
+
+            var failingObject = new FailingObject2();
+            Assert.Throws<ArgumentException>(() => engine.Invoke("f2", failingObject));
+        }
+
+        [Fact]
+        public void ShouldAutomaticallyConvertArraysToFindBestInteropResolution()
         {
             _engine.SetValue("a", new ArrayConverterTestClass());
             _engine.SetValue("item1", new ArrayConverterItem(1));
@@ -1484,7 +1585,7 @@ namespace Jint.Tests.Runtime
         [Fact]
         public void ShouldImportNamespaceNestedType()
         {
-          RunTest(@"
+            RunTest(@"
                 var shapes = importNamespace('Shapes.Circle');
                 var kinds = shapes.Kind;
                 assert(kinds.Unit === 0);
@@ -1496,7 +1597,7 @@ namespace Jint.Tests.Runtime
         [Fact]
         public void ShouldImportNamespaceNestedNestedType()
         {
-          RunTest(@"
+            RunTest(@"
                 var meta = importNamespace('Shapes.Circle.Meta');
                 var usages = meta.Usage;
                 assert(usages.Public === 0);
@@ -1842,7 +1943,7 @@ namespace Jint.Tests.Runtime
             Assert.Equal(engine.Invoke("throwException3").AsString(), exceptionMessage);
             Assert.Throws<ArgumentNullException>(() => engine.Invoke("throwException4"));
         }
-        
+
         [Fact]
         public void ArrayFromShouldConvertListToArrayLike()
         {
@@ -1867,7 +1968,7 @@ namespace Jint.Tests.Runtime
                 assert(arr[1].Name === 'Mika');
             ");
         }
-        
+
         [Fact]
         public void ArrayFromShouldConvertArrayToArrayLike()
         {
@@ -1892,7 +1993,7 @@ namespace Jint.Tests.Runtime
                 assert(arr[1].Name === 'Mika');
             ");
         }
-        
+
         [Fact]
         public void ArrayFromShouldConvertIEnumerable()
         {
@@ -1901,7 +2002,7 @@ namespace Jint.Tests.Runtime
                 new Person {Name = "Mike"},
                 new Person {Name = "Mika"}
             }.Select(x => x);
-            
+
             _engine.SetValue("a", enumerable);
 
             RunTest(@"
@@ -1928,6 +2029,149 @@ namespace Jint.Tests.Runtime
             engine.Execute("P.Name = 'b';");
             engine.Execute("P.Name += 'c';");
             Assert.Equal("bc", p.Name);
-        } 
+        }
+
+        [Fact]
+        public void ShouldNotResolveToPrimitiveSymbol()
+        {
+            var engine = new Engine(options => 
+                options.AllowClr(typeof(FloatIndexer).GetTypeInfo().Assembly));
+            var c = engine.Execute(@"
+                var domain = importNamespace('Jint.Tests.Runtime.Domain');
+                return new domain.FloatIndexer();
+            ").GetCompletionValue();
+
+            Assert.NotNull(c.ToString());
+            Assert.Equal((uint)0, c.As<ObjectInstance>().Length);
+        }
+
+        class DictionaryWrapper
+        {
+            public IDictionary<string, object> Values { get; set; }
+        }
+
+        class DictionaryTest
+        {
+            public void Test1(IDictionary<string, object> values)
+            {
+                Assert.Equal(1, Convert.ToInt32(values["a"]));
+            }
+
+            public void Test2(DictionaryWrapper dictionaryObject)
+            {
+                Assert.Equal(1, Convert.ToInt32(dictionaryObject.Values["a"]));
+            }
+        }
+
+        [Fact]
+        public void ShouldBeAbleToPassDictionaryToMethod()
+        {
+            var engine = new Engine();
+            engine.SetValue("dictionaryTest", new DictionaryTest());
+            engine.Execute("dictionaryTest.test1({ a: 1 });");
+        }
+
+        [Fact]
+        public void ShouldBeAbleToPassDictionaryInObjectToMethod()
+        {
+            var engine = new Engine();
+            engine.SetValue("dictionaryTest", new DictionaryTest());
+            engine.Execute("dictionaryTest.test2({ values: { a: 1 } });");
+        }
+
+        [Fact]
+        public void ShouldSupportSpreadForDictionary()
+        {
+            var engine = new Engine();
+            var state = new Dictionary<string, object>
+            {
+                {"invoice", new Dictionary<string, object> {["number"] = "42"}}
+            };
+            engine.SetValue("state", state);
+
+            var result = (IDictionary<string, object>) engine
+                .Execute("({ supplier: 'S1', ...state.invoice })")
+                .GetCompletionValue()
+                .ToObject();
+
+            Assert.Equal("S1", result["supplier"]);
+            Assert.Equal("42", result["number"]);            
+        }
+        
+        [Fact]
+        public void ShouldSupportSpreadForDictionary2()
+        {
+            var engine = new Engine();
+            var state = new Dictionary<string, object>
+            {
+                {"invoice", new Dictionary<string, object> {["number"] = "42"}}
+            };
+            engine.SetValue("state", state);
+
+            var result = (IDictionary<string, object>) engine
+                .Execute("function getValue() { return {supplier: 'S1', ...state.invoice}; }")
+                .Invoke("getValue")
+                .ToObject();
+            
+            Assert.Equal("S1", result["supplier"]);
+            Assert.Equal("42", result["number"]);    
+        }        
+
+        [Fact]
+        public void ShouldSupportSpreadForObject()
+        {
+            var engine = new Engine();
+            var person = new Person
+            {
+                Name = "Mike",
+                Age = 20
+            };
+            engine.SetValue("p", person);
+
+            var result = (IDictionary<string, object>) engine
+                .Execute("({ supplier: 'S1', ...p })")
+                .GetCompletionValue()
+                .ToObject();
+
+            Assert.Equal("S1", result["supplier"]);
+            Assert.Equal("Mike", result["Name"]);         
+            Assert.Equal(20d, result["Age"]);         
+        }
+
+        [Fact]
+        public void ShouldBeAbleToJsonStringifyClrObjects()
+        {
+            var engine = new Engine();
+
+            engine.Execute("var jsObj = { 'key1' :'value1', 'key2' : 'value2' }");
+
+            engine.SetValue("netObj", new Dictionary<string, object>()
+            {
+                {"key1", "value1"},
+                {"key2", "value2"},
+            });
+
+            var jsValue = engine.Execute("jsObj['key1']").GetCompletionValue().AsString();
+            var clrValue = engine.Execute("netObj['key1']").GetCompletionValue().AsString();
+            Assert.Equal(jsValue, clrValue);
+
+            jsValue = engine.Execute("JSON.stringify(jsObj)").GetCompletionValue().AsString();
+            clrValue = engine.Execute("JSON.stringify(netObj)").GetCompletionValue().AsString();
+            Assert.Equal(jsValue, clrValue);
+
+            // Write properties on screen using showProps function defined on https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Working_with_Objects
+            engine.Execute(@"function showProps(obj, objName) {
+  var result = """";
+  for (var i in obj) {
+    if (obj.hasOwnProperty(i)) {
+      result += objName + ""."" + i + "" = "" + obj[i] + ""\n"";
+    }
+    }
+  return result;
+}");
+            jsValue = engine.Execute("showProps(jsObj, 'theObject')").GetCompletionValue().AsString();
+            clrValue = engine.Execute("showProps(jsObj, 'theObject')").GetCompletionValue().AsString();
+            Assert.Equal(jsValue, clrValue);
+        }
     }
 }

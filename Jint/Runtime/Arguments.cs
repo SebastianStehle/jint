@@ -6,7 +6,7 @@ namespace Jint.Runtime
 {
     public static class Arguments
     {
-        public static readonly JsValue[] Empty = ArrayExt.Empty<JsValue>();
+        public static readonly JsValue[] Empty = Array.Empty<JsValue>();
 
         public static JsValue[] From(params JsValue[] o)
         {
@@ -33,24 +33,12 @@ namespace Jint.Runtime
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static T As<T>(this JsValue[] args, int index, Engine engine) where T : JsValue
-        {
-            var value = (uint) index < (uint) args.Length ? args[index] as T : null;
-            if (value is null)
-            {
-                ExceptionHelper.ThrowTypeError<JsValue>(engine);
-            }
-
-            return value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static JsValue[] Skip(this JsValue[] args, int count)
         {
             var newLength = args.Length - count;
             if (newLength <= 0)
             {
-                return ArrayExt.Empty<JsValue>();
+                return Array.Empty<JsValue>();
             }
 
             var array = new JsValue[newLength];

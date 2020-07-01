@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using Jint.Native;
 using Jint.Native.Object;
+using Jint.Native.Symbol;
 using Jint.Runtime.Descriptors;
 using Jint.Runtime.Descriptors.Specialized;
 
@@ -18,19 +20,50 @@ namespace Jint.Runtime.Interop
             : base(engine)
         {
             Target = obj;
-            if (obj is ICollection collection)
+            var type = obj.GetType();
+            if (ObjectIsArrayLikeClrCollection(type))
             {
+                // create a forwarder to produce length from Count or Length if one of them is present
+                var lengthProperty = type.GetProperty("Count") ?? type.GetProperty("Length");
+                if (lengthProperty is null)
+                {
+                    return;
+                }
                 IsArrayLike = true;
-                // create a forwarder to produce length from Count
-                var functionInstance = new ClrFunctionInstance(engine, "length", (thisObj, arguments) => collection.Count);
+
+                var functionInstance = new ClrFunctionInstance(engine, "length", (thisObj, arguments) => JsNumber.Create((int) lengthProperty.GetValue(obj)));
                 var descriptor = new GetSetPropertyDescriptor(functionInstance, Undefined, PropertyFlag.Configurable);
-                AddProperty(CommonProperties.Length, descriptor);
+                SetProperty(KnownKeys.Length, descriptor);
             }
+        }
+
+        private static bool ObjectIsArrayLikeClrCollection(Type type)
+        {
+            if (typeof(ICollection).IsAssignableFrom(type))
+            {
+                return true;
+            }
+            
+            foreach (var interfaceType in type.GetInterfaces())
+            {
+                if (!interfaceType.IsGenericType)
+                {
+                    continue;
+                }
+                
+                if (interfaceType.GetGenericTypeDefinition() == typeof(IReadOnlyCollection<>)
+                    || interfaceType.GetGenericTypeDefinition() == typeof(ICollection<>))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public object Target { get; }
 
-        internal override bool IsArrayLike { get; }
+        public override bool IsArrayLike { get; }
 
         public override bool Set(JsValue property, JsValue value, JsValue receiver)
         {
@@ -50,6 +83,76 @@ namespace Jint.Runtime.Interop
             return true;
         }
 
+        public override List<JsValue> GetOwnPropertyKeys(Types types = Types.None | Types.String | Types.Symbol)
+        {
+            return new List<JsValue>(EnumerateOwnPropertyKeys(types));
+        }
+
+        public override IEnumerable<KeyValuePair<JsValue, PropertyDescriptor>> GetOwnProperties()
+        {
+            foreach (var key in EnumerateOwnPropertyKeys(Types.String | Types.Symbol))
+            {
+                yield return new KeyValuePair<JsValue, PropertyDescriptor>(key, GetOwnProperty(key));
+            }
+        }
+
+        private IEnumerable<JsValue> EnumerateOwnPropertyKeys(Types types)
+        {
+            var basePropertyKeys = base.GetOwnPropertyKeys(types);
+            // prefer object order, add possible other properties after
+            var processed = basePropertyKeys.Count > 0 ? new HashSet<JsValue>() : null;
+
+            var includeStrings = (types & Types.String) != 0;
+            if (Target is IDictionary dictionary && includeStrings)
+            {
+                // we take values exposed as dictionary keys only 
+                foreach (var key in dictionary.Keys)
+                {
+                    if (_engine.ClrTypeConverter.TryConvert(key, typeof(string), CultureInfo.InvariantCulture, out var stringKey))
+                    {
+                        var jsString = JsString.Create((string) stringKey);
+                        processed?.Add(jsString);
+                        yield return jsString;
+                    }
+                }
+            }
+            else if (includeStrings)
+            {
+                // we take public properties and fields
+                var type = Target.GetType();
+                foreach (var p in type.GetProperties(BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public))
+                {
+                    var indexParameters = p.GetIndexParameters();
+                    if (indexParameters.Length == 0)
+                    {
+                        var jsString = JsString.Create(p.Name);
+                        processed?.Add(jsString);
+                        yield return jsString;
+                    }
+                }
+
+                foreach (var f in type.GetFields(BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public))
+                {
+                    var jsString = JsString.Create(f.Name);
+                    processed?.Add(jsString);
+                    yield return jsString;
+                }
+            }
+
+            if (processed != null)
+            {
+                // we have base keys
+                for (var i = 0; i < basePropertyKeys.Count; i++)
+                {
+                    var key = basePropertyKeys[i];
+                    if (processed.Add(key))
+                    {
+                        yield return key;
+                    }
+                }
+            }
+        }
+
         public override PropertyDescriptor GetOwnProperty(JsValue property)
         {
             if (TryGetProperty(property, out var x))
@@ -57,6 +160,14 @@ namespace Jint.Runtime.Interop
                 return x;
             }
 
+            if (property.IsSymbol() && property == GlobalSymbolRegistry.Iterator)
+            {
+                var iteratorFunction = new ClrFunctionInstance(Engine, "iterator", (thisObject, arguments) => _engine.Iterator.Construct(this), 1, PropertyFlag.Configurable);
+                var iteratorProperty = new PropertyDescriptor(iteratorFunction, PropertyFlag.Configurable | PropertyFlag.Writable);
+                SetProperty(GlobalSymbolRegistry.Iterator, iteratorProperty);
+                return iteratorProperty;
+            }
+            
             var type = Target.GetType();
             var key = new Engine.ClrPropertyDescriptorFactoriesKey(type, property.ToString());
 
@@ -71,7 +182,7 @@ namespace Jint.Runtime.Interop
             return descriptor;
         }
         
-        private static Func<Engine, object, PropertyDescriptor> ResolveProperty(Type type, string propertyName)
+        private Func<Engine, object, PropertyDescriptor> ResolveProperty(Type type, string propertyName)
         {
             var isNumber = uint.TryParse(propertyName, out _);
 
@@ -116,7 +227,7 @@ namespace Jint.Runtime.Interop
                 {
                     if (EqualsIgnoreCasing(m.Name, propertyName))
                     {
-                        methods = methods ?? new List<MethodInfo>();
+                        methods ??= new List<MethodInfo>();
                         methods.Add(m);
                     }
                 }
@@ -129,17 +240,7 @@ namespace Jint.Runtime.Interop
             }
 
             // if no methods are found check if target implemented indexing
-            PropertyInfo first = null;
-            foreach (var p in type.GetProperties())
-            {
-                if (p.GetIndexParameters().Length != 0)
-                {
-                    first = p;
-                    break;
-                }
-            }
-
-            if (first != null)
+            if (IndexDescriptor.TryFindIndexer(_engine, type, propertyName, out _, out _, out _))
             {
                 return (engine, target) => new IndexDescriptor(engine, propertyName, target);
             }
@@ -152,7 +253,7 @@ namespace Jint.Runtime.Interop
                 {
                     if (EqualsIgnoreCasing(iprop.Name, propertyName))
                     {
-                        list = list ?? new List<PropertyInfo>();
+                        list ??= new List<PropertyInfo>();
                         list.Add(iprop);
                     }
                 }
@@ -171,7 +272,7 @@ namespace Jint.Runtime.Interop
                 {
                     if (EqualsIgnoreCasing(imethod.Name, propertyName))
                     {
-                        explicitMethods = explicitMethods ?? new List<MethodInfo>();
+                        explicitMethods ??= new List<MethodInfo>();
                         explicitMethods.Add(imethod);
                     }
                 }
@@ -183,22 +284,12 @@ namespace Jint.Runtime.Interop
             }
 
             // try to find explicit indexer implementations
-            List<PropertyInfo> explicitIndexers = null;
-            foreach (Type iface in type.GetInterfaces())
+            foreach (Type interfaceType in type.GetInterfaces())
             {
-                foreach (var iprop in iface.GetProperties())
+                if (IndexDescriptor.TryFindIndexer(_engine, interfaceType, propertyName, out _, out _, out _))
                 {
-                    if (iprop.GetIndexParameters().Length != 0)
-                    {
-                        explicitIndexers = explicitIndexers ?? new List<PropertyInfo>();
-                        explicitIndexers.Add(iprop);
-                    }
+                    return (engine, target) => new IndexDescriptor(engine, interfaceType, propertyName, target);
                 }
-            }
-
-            if (explicitIndexers?.Count == 1)
-            {
-                return (engine, target) => new IndexDescriptor(engine, explicitIndexers[0].DeclaringType, propertyName, target);
             }
 
             return (engine, target) => PropertyDescriptor.Undefined;

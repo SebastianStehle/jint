@@ -548,11 +548,11 @@ namespace Jint.Native.Json
             }
         }
 
-        private T MarkEnd<T>(T node) where T : INode
+        private T MarkEnd<T>(T node) where T : Node
         {
             if (_extra.Range != null)
             {
-                node.Range = new Range(_state.MarkerStack.Pop(), _index);
+                node.Range = new Esprima.Ast.Range(_state.MarkerStack.Pop(), _index);
             }
             if (_extra.Loc.HasValue)
             {
@@ -569,9 +569,9 @@ namespace Jint.Native.Json
             return node;
         }
 
-        public T MarkEndIf<T>(T node) where T : INode
+        public T MarkEndIf<T>(T node) where T : Node
         {
-            if (node.Range != null || node.Location != null)
+            if (node.Range != default || node.Location != default)
             {
                 if (_extra.Loc.HasValue)
                 {
@@ -590,7 +590,7 @@ namespace Jint.Native.Json
             return node;
         }
 
-        public INode PostProcess(INode node)
+        public Node PostProcess(Node node)
         {
             //if (_extra.Source != null)
             //{

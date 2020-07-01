@@ -1,20 +1,20 @@
-using System;
 using Esprima.Ast;
 using Jint.Collections;
 using Jint.Native;
 using Jint.Native.Function;
+using Jint.Native.Object;
 using Jint.Runtime.Descriptors;
 using Jint.Runtime.Descriptors.Specialized;
 
 namespace Jint.Runtime.Interpreter.Expressions
 {
     /// <summary>
-    /// http://www.ecma-international.org/ecma-262/5.1/#sec-11.1.5
+    /// http://www.ecma-international.org/ecma-262/#sec-object-initializer
     /// </summary>
     internal sealed class JintObjectExpression : JintExpression
     {
-        private JintExpression[] _valueExpressions = ArrayExt.Empty<JintExpression>();
-        private ObjectProperty[] _properties = ArrayExt.Empty<ObjectProperty>();
+        private JintExpression[] _valueExpressions = System.Array.Empty<JintExpression>();
+        private ObjectProperty[] _properties = System.Array.Empty<ObjectProperty>();
 
         // check if we can do a shortcut when all are object properties
         // and don't require duplicate checking
@@ -55,30 +55,42 @@ namespace Jint.Runtime.Interpreter.Expressions
 
             for (var i = 0; i < _properties.Length; i++)
             {
-                var property = expression.Properties[i];
                 string propName = null;
-
-                if (property.Key is Literal literal)
+                var property = expression.Properties[i];
+                if (property is Property p)
                 {
-                    propName = EsprimaExtensions.LiteralKeyToString(literal);
+                    if (p.Key is Literal literal)
+                    {
+                        propName = EsprimaExtensions.LiteralKeyToString(literal);
+                    }
+
+                    if (!p.Computed && p.Key is Identifier identifier)
+                    {
+                        propName = identifier.Name;
+                    }
+
+                    _properties[i] = new ObjectProperty(propName, p);
+
+                    if (p.Kind == PropertyKind.Init || p.Kind == PropertyKind.Data)
+                    {
+                        var propertyValue = p.Value;
+                        _valueExpressions[i] = Build(_engine, propertyValue);
+                        _canBuildFast &= !propertyValue.IsFunctionWithName();
+                    }
+                    else
+                    {
+                        _canBuildFast = false;
+                    }
                 }
-
-                if (!property.Computed && property.Key is Identifier identifier)
+                else if (property is SpreadElement spreadElement)
                 {
-                    propName = identifier.Name;
-                }
-
-                _properties[i] = new ObjectProperty(propName, property);
-
-                if (property.Kind == PropertyKind.Init || property.Kind == PropertyKind.Data)
-                {
-                    var propertyValue = (Expression) property.Value;
-                    _valueExpressions[i] = Build(_engine, propertyValue);
-                    _canBuildFast &= !propertyValue.IsFunctionWithName();
+                    _canBuildFast = false;
+                    _properties[i] = null;
+                    _valueExpressions[i] = Build(_engine, spreadElement.Argument);
                 }
                 else
                 {
-                    _canBuildFast = false;
+                    ExceptionHelper.ThrowArgumentOutOfRangeException("property", "cannot handle property " + property);
                 }
 
                 _canBuildFast &= propName != null;
@@ -118,11 +130,22 @@ namespace Jint.Runtime.Interpreter.Expressions
         private object BuildObjectNormal()
         {
             var obj = _engine.Object.Construct(_properties.Length);
-            bool isStrictModeCode = StrictModeScope.IsStrictModeCode;
+            bool isStrictModeCode = _engine._isStrict || StrictModeScope.IsStrictModeCode;
 
             for (var i = 0; i < _properties.Length; i++)
             {
                 var objectProperty = _properties[i];
+
+                if (objectProperty is null)
+                {
+                    // spread
+                    if (_valueExpressions[i].GetValue() is ObjectInstance source)
+                    {
+                        source.CopyDataProperties(obj, null);
+                    }
+                    continue;
+                }
+                
                 var property = objectProperty._value;
                 var propName = objectProperty.KeyJsString ?? property.GetKey(_engine);
 

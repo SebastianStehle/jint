@@ -9,47 +9,19 @@ namespace Jint.Runtime.Descriptors.Specialized
     {
         private readonly Engine _engine;
         private readonly object _key;
-        private readonly object _item;
+        private readonly object _target;
         private readonly PropertyInfo _indexer;
         private readonly MethodInfo _containsKey;
 
-        public IndexDescriptor(Engine engine, Type targetType, string key, object item) : base(PropertyFlag.CustomJsValue)
+        public IndexDescriptor(Engine engine, Type targetType, string key, object target)
+            : base(PropertyFlag.Enumerable | PropertyFlag.CustomJsValue)
         {
             _engine = engine;
-            _item = item;
+            _target = target;
 
-            // get all instance indexers with exactly 1 argument
-            var indexers = targetType.GetProperties();
-            var paramTypeArray = new Type[1];
-
-            // try to find first indexer having either public getter or setter with matching argument type
-            foreach (var indexer in indexers)
+            if (!TryFindIndexer(engine, targetType, key, out _indexer, out _containsKey, out _key))
             {
-                var indexParameters = indexer.GetIndexParameters();
-                if (indexParameters.Length != 1)
-                {
-                    continue;
-                }
-
-                if (indexer.GetGetMethod() != null || indexer.GetSetMethod() != null)
-                {
-                    var paramType = indexParameters[0].ParameterType;
-
-                    if (_engine.ClrTypeConverter.TryConvert(key, paramType, CultureInfo.InvariantCulture, out _key))
-                    {
-                        _indexer = indexer;
-                        // get contains key method to avoid index exception being thrown in dictionaries
-                        paramTypeArray[0] = paramType;
-                        _containsKey = targetType.GetMethod("ContainsKey", paramTypeArray);
-                        break;
-                    }
-                }
-            }
-
-            // throw if no indexer found
-            if (_indexer == null)
-            {
-                ExceptionHelper.ThrowInvalidOperationException("No matching indexer found.");
+                ExceptionHelper.ThrowArgumentException("invalid indexing configuration, target indexer not found");
             }
 
             Writable = engine.Options._IsClrWriteAllowed;
@@ -58,6 +30,47 @@ namespace Jint.Runtime.Descriptors.Specialized
         public IndexDescriptor(Engine engine, string key, object item)
             : this(engine, item.GetType(), key, item)
         {
+        }
+
+        internal static bool TryFindIndexer(
+            Engine engine,
+            Type targetType,
+            string propertyName,
+            out PropertyInfo indexerProperty,
+            out MethodInfo containsKeyMethod,
+            out object indexerKey)
+        {
+            // get all instance indexers with exactly 1 argument
+            var paramTypeArray = new Type[1];
+
+            // try to find first indexer having either public getter or setter with matching argument type
+            foreach (var candidate in targetType.GetProperties())
+            {
+                var indexParameters = candidate.GetIndexParameters();
+                if (indexParameters.Length != 1)
+                {
+                    continue;
+                }
+
+                if (candidate.GetGetMethod() != null || candidate.GetSetMethod() != null)
+                {
+                    var paramType = indexParameters[0].ParameterType;
+
+                    if (engine.ClrTypeConverter.TryConvert(propertyName, paramType, CultureInfo.InvariantCulture, out indexerKey))
+                    {
+                        indexerProperty = candidate;
+                        // get contains key method to avoid index exception being thrown in dictionaries
+                        paramTypeArray[0] = paramType;
+                        containsKeyMethod = targetType.GetMethod("ContainsKey", paramTypeArray);
+                        return true;
+                    }
+                }
+            }
+
+            indexerProperty = default;
+            containsKeyMethod = default;
+            indexerKey = default;
+            return false;
         }
 
         protected internal override JsValue CustomValue
@@ -71,11 +84,11 @@ namespace Jint.Runtime.Descriptors.Specialized
                     ExceptionHelper.ThrowInvalidOperationException("Indexer has no public getter.");
                 }
 
-                object[] parameters = {_key};
+                object[] parameters = { _key };
 
                 if (_containsKey != null)
                 {
-                    if ((_containsKey.Invoke(_item, parameters) as bool?) != true)
+                    if ((_containsKey.Invoke(_target, parameters) as bool?) != true)
                     {
                         return JsValue.Undefined;
                     }
@@ -83,14 +96,23 @@ namespace Jint.Runtime.Descriptors.Specialized
 
                 try
                 {
-                    return JsValue.FromObject(_engine, getter.Invoke(_item, parameters));
+                    return JsValue.FromObject(_engine, getter.Invoke(_target, parameters));
                 }
-                catch
+                catch (TargetInvocationException tie)
                 {
-                    return JsValue.Undefined;
+                    switch (tie.InnerException)
+                    {
+                        case null:
+                            throw;
+                        case ArgumentOutOfRangeException _:
+                            return JsValue.Undefined;
+                        case IndexOutOfRangeException _:
+                            return JsValue.Undefined;
+                        default:
+                            throw tie.InnerException;
+                    }
                 }
             }
-
             set
             {
                 var setter = _indexer.GetSetMethod();
@@ -99,8 +121,19 @@ namespace Jint.Runtime.Descriptors.Specialized
                     ExceptionHelper.ThrowInvalidOperationException("Indexer has no public setter.");
                 }
 
-                object[] parameters = {_key, value?.ToObject()};
-                setter.Invoke(_item, parameters);
+                object[] parameters = { _key,  value?.ToObject() };
+                try
+                {
+                    setter!.Invoke(_target, parameters);
+                }
+                catch (TargetInvocationException tie)
+                {
+                    if (tie.InnerException != null)
+                    {
+                        throw tie.InnerException;
+                    }
+                    throw;
+                }
             }
         }
     }

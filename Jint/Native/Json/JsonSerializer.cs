@@ -28,14 +28,14 @@ namespace Jint.Native.Json
 
             // for JSON.stringify(), any function passed as the first argument will return undefined
             // if the replacer is not defined. The function is not called either.
-            if (value.Is<ICallable>() && ReferenceEquals(replacer, Undefined.Instance))
+            if (value is ICallable callable && ReferenceEquals(replacer, Undefined.Instance))
             {
                 return Undefined.Instance;
             }
 
             if (replacer.IsObject())
             {
-                if (replacer.Is<ICallable>())
+                if (replacer is ICallable)
                 {
                     _replacerFunction = replacer;
                 }
@@ -53,7 +53,7 @@ namespace Jint.Native.Json
                         string item = null;
                         if (v.IsString())
                         {
-                            item = v.AsStringWithoutTypeCheck();
+                            item = v.ToString();
                         }
                         else if (v.IsNumber())
                         {
@@ -105,7 +105,7 @@ namespace Jint.Native.Json
             }
             else if (space.IsString())
             {
-                var stringSpace = space.AsStringWithoutTypeCheck();
+                var stringSpace = space.ToString();
                 _gap = stringSpace.Length <= 10 ? stringSpace : stringSpace.Substring(0, 10);
             }
             else
@@ -177,7 +177,7 @@ namespace Jint.Native.Json
 
             if (value.IsString())
             {
-                return Quote(value.AsStringWithoutTypeCheck());
+                return Quote(value.ToString());
             }
 
             if (value.IsNumber())
@@ -264,7 +264,7 @@ namespace Jint.Native.Json
                 var strP = Str(TypeConverter.ToString(i), value);
                 if (strP.IsUndefined())
                     strP = "null";
-                partial.Add(strP.AsStringWithoutTypeCheck());
+                partial.Add(strP.ToString());
             }
             if (partial.Count == 0)
             {

@@ -79,7 +79,7 @@ namespace Jint.Runtime
                 }
                 else
                 {
-                    _array = ArrayExt.Empty<ExecutionContext>();
+                    _array = Array.Empty<ExecutionContext>();
                 }
             }
         }
@@ -87,6 +87,11 @@ namespace Jint.Runtime
         public void ReplaceTopLexicalEnvironment(LexicalEnvironment newEnv)
         {
             _array[_size - 1] = _array[_size - 1].UpdateLexicalEnvironment(newEnv);
+        }
+
+        public void ReplaceTopVariableEnvironment(LexicalEnvironment newEnv)
+        {
+            _array[_size - 1] = _array[_size - 1].UpdateVariableEnvironment(newEnv);
         }
     }
 }

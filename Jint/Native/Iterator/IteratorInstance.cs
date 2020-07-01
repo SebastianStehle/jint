@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+
 using Jint.Native.Array;
 using Jint.Native.Map;
 using Jint.Native.Object;
@@ -36,17 +38,19 @@ namespace Jint.Native.Iterator
             return false;
         }
 
-        public virtual ObjectInstance Next()
+        public virtual bool TryIteratorStep(out ObjectInstance nextItem)
         {
             if (_enumerable.MoveNext())
             {
-                return new ValueIteratorPosition(_engine, _enumerable.Current);
+                nextItem = new ValueIteratorPosition(_engine, _enumerable.Current);
+                return true;
             }
 
-            return ValueIteratorPosition.Done;
+            nextItem = ValueIteratorPosition.Done;
+            return false;
         }
 
-        public void Return()
+        public void Close(CompletionType completion)
         {
         }
 
@@ -103,7 +107,7 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (_position < _map.GetSize())
                 {
@@ -111,10 +115,12 @@ namespace Jint.Native.Iterator
                     var value = _map._map[key];
 
                     _position++;
-                    return new KeyValueIteratorPosition(_engine, key, value);
+                    nextItem = new KeyValueIteratorPosition(_engine, key, value);
+                    return true;
                 }
 
-                return KeyValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
@@ -136,7 +142,7 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (_end == null)
                 {
@@ -146,10 +152,12 @@ namespace Jint.Native.Iterator
                 if (_position < _end.Value)
                 {
                     _array.TryGetValue(_position, out var value);
-                    return new KeyValueIteratorPosition(_engine, _position++, value);
+                    nextItem = new KeyValueIteratorPosition(_engine, _position++, value);
+                    return true;
                 }
 
-                return KeyValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
@@ -164,16 +172,18 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (_position < _set._set._list.Count)
                 {
                     var value = _set._set[_position];
                     _position++;
-                    return new  ValueIteratorPosition(_engine, value);
+                    nextItem = new  ValueIteratorPosition(_engine, value);
+                    return true;
                 }
 
-                return KeyValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
@@ -188,16 +198,18 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (_position < _set._set._list.Count)
                 {
                     var value = _set._set[_position];
                     _position++;
-                    return new  KeyValueIteratorPosition(_engine, value, value);
+                    nextItem = new  KeyValueIteratorPosition(_engine, value, value);
+                    return true;
                 }
 
-                return KeyValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
@@ -213,17 +225,19 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (!_closed && _position < _values.Count)
                 {
                     var value = _values[_position];
                     _position++;
-                    return new  ValueIteratorPosition(_engine, value);
+                    nextItem = new  ValueIteratorPosition(_engine, value);
+                    return true;
                 }
 
                 _closed = true;
-                return ValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         } 
 
@@ -239,16 +253,18 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 var length = _operations.GetLength();
                 if (!_closed && _position < length)
                 {
-                    return new  ValueIteratorPosition(_engine, _position++);
+                    nextItem = new  ValueIteratorPosition(_engine, _position++);
+                    return true;
                 }
 
                 _closed = true;
-                return ValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
@@ -264,67 +280,98 @@ namespace Jint.Native.Iterator
                 _position = 0;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 var length = _operations.GetLength();
                 if (!_closed && _position < length)
                 {
                     _operations.TryGetValue(_position++, out var value);
-                    return new ValueIteratorPosition(_engine, value);
+                    nextItem = new ValueIteratorPosition(_engine, value);
+                    return true;
                 }
 
                 _closed = true;
-                return ValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
 
-        internal class ObjectWrapper : IIterator
+        internal class ObjectIterator : IIterator
         {
             private readonly ObjectInstance _target;
-            private readonly ICallable _callable;
+            private readonly ICallable _nextMethod;
 
-            public ObjectWrapper(ObjectInstance target)
+            public ObjectIterator(ObjectInstance target)
             {
                 _target = target;
-                _callable = (ICallable) target.Get(CommonProperties.Next, target);
+                _nextMethod = target.Get(CommonProperties.Next, target) as ICallable
+                            ?? ExceptionHelper.ThrowTypeError<ICallable>(target.Engine);
             }
 
-            public ObjectInstance Next()
+            public bool TryIteratorStep(out ObjectInstance result)
             {
-                return (ObjectInstance) _callable.Call(_target, Arguments.Empty);
-            }
+                result = IteratorNext();
 
-            public void Return()
-            {
-                if (_target.TryGetValue(CommonProperties.Return, out var func))
+                var done = result.Get(CommonProperties.Done);
+                if (!done.IsUndefined() && TypeConverter.ToBoolean(done))
                 {
-                    ((ICallable) func).Call(_target, Arguments.Empty);
+                    return false;
+                }
+
+                return true;
+            }
+
+            private ObjectInstance IteratorNext()
+            {
+                var jsValue = _nextMethod.Call(_target, Arguments.Empty);
+                return jsValue as ObjectInstance ?? ExceptionHelper.ThrowTypeError<ObjectInstance>(_target.Engine, "Iterator result " + jsValue + " is not an object");
+            }
+
+            public void Close(CompletionType completion)
+            {
+                if (!_target.TryGetValue(CommonProperties.Return, out var func))
+                {
+                    return;
+                }
+
+                var innerResult = Undefined;
+                try
+                {
+                    innerResult = ((ICallable) func).Call(_target, Arguments.Empty);
+                }
+                catch
+                {
+                    if (completion != CompletionType.Throw)
+                    {
+                        throw;
+                    }
+                }
+                if (completion != CompletionType.Throw && !innerResult.IsObject())
+                {
+                    ExceptionHelper.ThrowTypeError(_target.Engine);
                 }
             }
         }
 
         internal class StringIterator : IteratorInstance
         {
-            private readonly string _str;
-            private int _position;
-            private bool _closed;
+            private readonly TextElementEnumerator _iterator;
 
             public StringIterator(Engine engine, string str) : base(engine)
             {
-                _str = str;
-                _position = 0;
+                _iterator = StringInfo.GetTextElementEnumerator(str);
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
-                var length = _str.Length;
-                if (!_closed && _position < length)
+                if (_iterator.MoveNext())
                 {
-                    return new ValueIteratorPosition(_engine, _str[_position++]);
+                    nextItem = new ValueIteratorPosition(_engine, (string) _iterator.Current);
+                    return true;
                 }
 
-                _closed = true;
-                return ValueIteratorPosition.Done;
+                nextItem = KeyValueIteratorPosition.Done;
+                return false;
             }
         }
         
@@ -351,18 +398,20 @@ namespace Jint.Native.Iterator
                 _unicode = unicode;
             }
 
-            public override ObjectInstance Next()
+            public override bool TryIteratorStep(out ObjectInstance nextItem)
             {
                 if (_done)
                 {
-                    return CreateIterResultObject(Undefined, true);
+                    nextItem = CreateIterResultObject(Undefined, true);
+                    return false;
                 }
                 
                 var match  = RegExpPrototype.RegExpExec(_iteratingRegExp, _s);
                 if (match.IsNull())
                 {
                     _done = true;
-                    return CreateIterResultObject(Undefined, true);
+                    nextItem = CreateIterResultObject(Undefined, true);
+                    return false;
                 }
 
                 if (_global)
@@ -380,7 +429,8 @@ namespace Jint.Native.Iterator
                     _done = true;
                 }
 
-                return CreateIterResultObject(match, false);
+                nextItem = CreateIterResultObject(match, false);
+                return false;
             }
         }
     }

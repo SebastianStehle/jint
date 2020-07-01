@@ -29,48 +29,49 @@ namespace Jint.Native.Global
 
         protected override void Initialize()
         {
-            const PropertyFlag defaultFlags = PropertyFlag.Configurable | PropertyFlag.Writable;
+            const PropertyFlag lengthFlags = PropertyFlag.Configurable;
+            const PropertyFlag propertyFlags = PropertyFlag.Configurable | PropertyFlag.Writable;
             var properties = new PropertyDictionary(40, checkExistingKeys: false)
             {
-                ["Object"] = new PropertyDescriptor(Engine.Object, defaultFlags),
-                ["Function"] = new PropertyDescriptor(Engine.Function, defaultFlags),
-                ["Symbol"] = new PropertyDescriptor(Engine.Symbol, defaultFlags),
-                ["Array"] = new PropertyDescriptor(Engine.Array, defaultFlags),
-                ["Map"] = new PropertyDescriptor(Engine.Map, defaultFlags),
-                ["Set"] = new PropertyDescriptor(Engine.Set, defaultFlags),
-                ["String"] = new PropertyDescriptor(Engine.String, defaultFlags),
-                ["RegExp"] = new PropertyDescriptor(Engine.RegExp, defaultFlags),
-                ["Number"] = new PropertyDescriptor(Engine.Number, defaultFlags),
-                ["Boolean"] = new PropertyDescriptor(Engine.Boolean, defaultFlags),
-                ["Date"] = new PropertyDescriptor(Engine.Date, defaultFlags),
-                ["Math"] = new PropertyDescriptor(Engine.Math, defaultFlags),
-                ["JSON"] = new PropertyDescriptor(Engine.Json, defaultFlags),
-                ["Error"] = new LazyPropertyDescriptor(() => Engine.Error, defaultFlags),
-                ["EvalError"] = new LazyPropertyDescriptor(() => Engine.EvalError, defaultFlags),
-                ["Proxy"] = new LazyPropertyDescriptor(() => Engine.Proxy, defaultFlags),
-                ["RangeError"] = new LazyPropertyDescriptor(() => Engine.RangeError, defaultFlags),
-                ["ReferenceError"] = new LazyPropertyDescriptor(() => Engine.ReferenceError, defaultFlags),
-                ["Reflect"] = new LazyPropertyDescriptor(() => Engine.Reflect, defaultFlags),
-                ["SyntaxError"] = new LazyPropertyDescriptor(() => Engine.SyntaxError, defaultFlags),
-                ["TypeError"] = new LazyPropertyDescriptor(() => Engine.TypeError, defaultFlags),
-                ["URIError"] = new LazyPropertyDescriptor(() => Engine.UriError, defaultFlags),
+                ["Object"] = new PropertyDescriptor(Engine.Object, propertyFlags),
+                ["Function"] = new PropertyDescriptor(Engine.Function, propertyFlags),
+                ["Symbol"] = new PropertyDescriptor(Engine.Symbol, propertyFlags),
+                ["Array"] = new PropertyDescriptor(Engine.Array, propertyFlags),
+                ["Map"] = new PropertyDescriptor(Engine.Map, propertyFlags),
+                ["Set"] = new PropertyDescriptor(Engine.Set, propertyFlags),
+                ["String"] = new PropertyDescriptor(Engine.String, propertyFlags),
+                ["RegExp"] = new PropertyDescriptor(Engine.RegExp, propertyFlags),
+                ["Number"] = new PropertyDescriptor(Engine.Number, propertyFlags),
+                ["Boolean"] = new PropertyDescriptor(Engine.Boolean, propertyFlags),
+                ["Date"] = new PropertyDescriptor(Engine.Date, propertyFlags),
+                ["Math"] = new PropertyDescriptor(Engine.Math, propertyFlags),
+                ["JSON"] = new PropertyDescriptor(Engine.Json, propertyFlags),
+                ["Error"] = new LazyPropertyDescriptor(() => Engine.Error, propertyFlags),
+                ["EvalError"] = new LazyPropertyDescriptor(() => Engine.EvalError, propertyFlags),
+                ["Proxy"] = new LazyPropertyDescriptor(() => Engine.Proxy, propertyFlags),
+                ["RangeError"] = new LazyPropertyDescriptor(() => Engine.RangeError, propertyFlags),
+                ["ReferenceError"] = new LazyPropertyDescriptor(() => Engine.ReferenceError, propertyFlags),
+                ["Reflect"] = new LazyPropertyDescriptor(() => Engine.Reflect, propertyFlags),
+                ["SyntaxError"] = new LazyPropertyDescriptor(() => Engine.SyntaxError, propertyFlags),
+                ["TypeError"] = new LazyPropertyDescriptor(() => Engine.TypeError, propertyFlags),
+                ["URIError"] = new LazyPropertyDescriptor(() => Engine.UriError, propertyFlags),
                 ["NaN"] = new PropertyDescriptor(double.NaN, PropertyFlag.None),
                 ["Infinity"] = new PropertyDescriptor(double.PositiveInfinity, PropertyFlag.None),
                 ["undefined"] = new PropertyDescriptor(Undefined, PropertyFlag.None),
-                ["parseInt"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "parseInt", ParseInt, 2, PropertyFlag.Configurable), defaultFlags),
-                ["parseFloat"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "parseFloat", ParseFloat, 1, PropertyFlag.Configurable), defaultFlags),
-                ["isNaN"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "isNaN", IsNaN, 1), defaultFlags),
-                ["isFinite"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "isFinite", IsFinite, 1), defaultFlags),
-                ["decodeURI"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "decodeURI", DecodeUri, 1, PropertyFlag.Configurable), defaultFlags),
-                ["decodeURIComponent"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "decodeURIComponent", DecodeUriComponent, 1, PropertyFlag.Configurable), defaultFlags),
-                ["encodeURI"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "encodeURI", EncodeUri, 1, PropertyFlag.Configurable), defaultFlags),
-                ["encodeURIComponent"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "encodeURIComponent", EncodeUriComponent, 1, PropertyFlag.Configurable), defaultFlags),
-                ["escape"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "escape", Escape, 1), defaultFlags),
-                ["unescape"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "unescape", Unescape, 1), defaultFlags),
-                ["globalThis"] = new PropertyDescriptor(this, defaultFlags),
+                ["parseInt"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "parseInt", ParseInt, 2, lengthFlags), propertyFlags),
+                ["parseFloat"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "parseFloat", ParseFloat, 1, lengthFlags), propertyFlags),
+                ["isNaN"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "isNaN", IsNaN, 1, lengthFlags), propertyFlags),
+                ["isFinite"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "isFinite", IsFinite, 1, lengthFlags), propertyFlags),
+                ["decodeURI"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "decodeURI", DecodeUri, 1, lengthFlags), propertyFlags),
+                ["decodeURIComponent"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "decodeURIComponent", DecodeUriComponent, 1, lengthFlags), propertyFlags),
+                ["encodeURI"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "encodeURI", EncodeUri, 1, lengthFlags), propertyFlags),
+                ["encodeURIComponent"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "encodeURIComponent", EncodeUriComponent, 1, lengthFlags), propertyFlags),
+                ["escape"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "escape", Escape, 1), propertyFlags),
+                ["unescape"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "unescape", Unescape, 1), propertyFlags),
+                ["globalThis"] = new PropertyDescriptor(this, propertyFlags),
 
                 // toString is not mentioned or actually required in spec, but some tests rely on it
-                ["toString"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "toString", ToStringString, 1), defaultFlags)
+                ["toString"] = new PropertyDescriptor(new ClrFunctionInstance(Engine, "toString", ToStringString, 1), propertyFlags)
             };
 
             SetProperties(properties);
@@ -452,7 +453,7 @@ namespace Jint.Native.Global
                         v = (c - 0xD800) * 0x400 + (kChar - 0xDC00) + 0x10000;
                     }
 
-                    byte[] octets = ArrayExt.Empty<byte>();
+                    byte[] octets = System.Array.Empty<byte>();
 
                     if (v >= 0 && v <= 0x007F)
                     {
@@ -536,7 +537,7 @@ namespace Jint.Native.Global
             _stringBuilder.EnsureCapacity(strLen);
             _stringBuilder.Clear();
 
-            var octets = ArrayExt.Empty<byte>();
+            var octets = System.Array.Empty<byte>();
 
             for (var k = 0; k < strLen; k++)
             {
@@ -706,14 +707,14 @@ namespace Jint.Native.Global
         
         // optimized versions with string parameter and without virtual dispatch for global environment usage
 
-        internal bool HasProperty(in Key property)
+        internal bool HasProperty(Key property)
         {
             return GetOwnProperty(property) != PropertyDescriptor.Undefined;
         }
 
-        internal PropertyDescriptor GetProperty(in Key property) => GetOwnProperty(property);
+        internal PropertyDescriptor GetProperty(Key property) => GetOwnProperty(property);
 
-        internal bool DefinePropertyOrThrow(in Key property, PropertyDescriptor desc)
+        internal bool DefinePropertyOrThrow(Key property, PropertyDescriptor desc)
         {
             if (!DefineOwnProperty(property, desc))
             {
@@ -723,7 +724,7 @@ namespace Jint.Native.Global
             return true;
         }
 
-        internal bool DefineOwnProperty(in Key property, PropertyDescriptor desc)
+        internal bool DefineOwnProperty(Key property, PropertyDescriptor desc)
         {
             var current = GetOwnProperty(property);
             if (current == desc)
@@ -742,20 +743,20 @@ namespace Jint.Native.Global
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal PropertyDescriptor GetOwnProperty(in Key property)
+        internal PropertyDescriptor GetOwnProperty(Key property)
         {
             Properties.TryGetValue(property, out var descriptor);
             return descriptor ?? PropertyDescriptor.Undefined;
         }
         
-        internal bool Set(in Key property, JsValue value)
+        internal bool Set(Key property, JsValue value)
         {
             // here we are called only from global environment record context
             // we can take some shortcuts to be faster
 
-            if (!Properties.TryGetValue(property, out var existingDescriptor))
+            if (!_properties.TryGetValue(property, out var existingDescriptor))
             {
-                Properties[property] = new PropertyDescriptor(value, PropertyFlag.ConfigurableEnumerableWritable);
+                _properties[property] = new PropertyDescriptor(value, PropertyFlag.ConfigurableEnumerableWritable);
                 return true;
             }
 
@@ -788,9 +789,9 @@ namespace Jint.Native.Global
         }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void SetOwnProperty(in Key property, PropertyDescriptor desc)
+        internal void SetOwnProperty(Key property, PropertyDescriptor desc)
         {
-            SetProperty(in property, desc);
+            SetProperty(property, desc);
         }
     }
 }

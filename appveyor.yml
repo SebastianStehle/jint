@@ -22,12 +22,10 @@ build_script:
   - dotnet --version
   - dotnet pack -c Release
 test_script:
-  - dotnet test .\Jint.Tests\Jint.Tests.csproj -c Release -f netcoreapp3.0
-  - dotnet test .\Jint.Tests\Jint.Tests.csproj -c Release -f net452
-  - dotnet test .\Jint.Tests.CommonScripts\Jint.Tests.CommonScripts.csproj -c Release -f netcoreapp3.0
-  - dotnet test .\Jint.Tests.Ecma\Jint.Tests.Ecma.csproj -c Release -f netcoreapp3.0
-  - dotnet test .\Jint.Tests.Test262\Jint.Tests.Test262.csproj -c Release -f netcoreapp3.0
-  - dotnet test .\Jint.Tests.Test262\Jint.Tests.Test262.csproj -c Release -f net452
+  - dotnet test .\Jint.Tests\Jint.Tests.csproj -c Release
+  - dotnet test .\Jint.Tests.CommonScripts\Jint.Tests.CommonScripts.csproj -c Release
+  - dotnet test .\Jint.Tests.Ecma\Jint.Tests.Ecma.csproj -c Release
+  - dotnet test .\Jint.Tests.Test262\Jint.Tests.Test262.csproj -c Release
 artifacts:
   - path: 'Jint\**\*.nupkg'
 deploy:  
@@ -44,7 +42,7 @@ deploy:
       branch: rel/3.0-beta
     server: https://www.nuget.org/api/v2/package
     api_key:
-      secure: afBcTXCXlelAScAZiDD3rOM/CmOMtdrW4fXKWeS7/bFfKN0AFmxyp3TUX5OM3haf
+      secure: yZBBCLlJTphpHCezRUxyDny1mBbDw7xFG/2Rwt21A8khKp6KJCxFEYx4k9IihOjO
     skip_symbols: true
     artifact: /.*\.nupkg/  
   - provider: NuGet
@@ -52,6 +50,6 @@ deploy:
       branch: master
     server: https://www.nuget.org/api/v2/package
     api_key:
-      secure: afBcTXCXlelAScAZiDD3rOM/CmOMtdrW4fXKWeS7/bFfKN0AFmxyp3TUX5OM3haf
+      secure: yZBBCLlJTphpHCezRUxyDny1mBbDw7xFG/2Rwt21A8khKp6KJCxFEYx4k9IihOjO
     skip_symbols: true
     artifact: /.*\.nupkg/

@@ -1458,7 +1458,12 @@ var prep = function (fn) { fn(); };
             Assert.Equal(new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc), minValue);
 
             var maxValue = engine.Execute("new Date('9999-12-31T23:59:59.999')").GetCompletionValue().ToObject();
+
+#if NETCOREAPP
+            Assert.Equal(new DateTime(9999, 12, 31, 23, 59, 59, 998, DateTimeKind.Utc), maxValue);
+#else
             Assert.Equal(new DateTime(9999, 12, 31, 23, 59, 59, 999, DateTimeKind.Utc), maxValue);
+#endif
         }
 
         [Fact]
@@ -1883,6 +1888,16 @@ var prep = function (fn) { fn(); };
                 assert(a['0'] === 'foo');
                 assert(a['00'] === undefined);
             ");
+        }
+
+        [Fact]
+        public void HexZeroAsArrayIndexShouldWork()
+        {
+            var engine = new Engine();
+            engine.Execute("var t = '1234'; var value = null;");
+            Assert.Equal("1", engine.Execute("value = t[0x0];").GetValue("value").AsString());
+            Assert.Equal("1", engine.Execute("value = t[0];").GetValue("value").AsString());
+            Assert.Equal("1", engine.Execute("value = t['0'];").GetValue("value").AsString());
         }
 
         [Fact]
@@ -2819,6 +2834,19 @@ x.test = {
             _engine.Execute("equal(false, str.hasOwnProperty('foo'));");
         }
 
+        [Fact]
+        public void ShouldProvideEngineForOptionsAsOverload()
+        {
+            new Engine((e, options) =>
+                {
+                    Assert.IsType<Engine>(e);
+                    options
+                        .AddObjectConverter(new TestObjectConverter())
+                        .AddObjectConverter<TestObjectConverter>();
+                })
+                .SetValue("a", 1);
+        }
+
         private class Wrapper
         {
             public Testificate Test { get; set; }
@@ -2830,9 +2858,16 @@ x.test = {
             public Func<int, int, int> Init { get; set; }
         }
 
+        private class TestObjectConverter : Jint.Runtime.Interop.IObjectConverter
+        {
+            public bool TryConvert(Engine engine, object value, out JsValue result)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         private class TestTypeConverter : Jint.Runtime.Interop.ITypeConverter
         {
-
             public object Convert(object value, Type type, IFormatProvider formatProvider)
             {
                 throw new NotImplementedException();
