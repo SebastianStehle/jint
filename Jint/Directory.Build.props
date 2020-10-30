@@ -7,7 +7,7 @@
     <BuildNumber Condition="'$(BuildNumber)' == ''">0</BuildNumber>
     <VersionPrefix>3.0.0-beta-$(BuildNumber)</VersionPrefix>
     <VersionSuffix></VersionSuffix>
-    <PackageId>Jint</PackageId>
+    <PackageId>Squidex.Jint</PackageId>
     <PackageTags>javascript, interpreter</PackageTags>
     <PackageProjectUrl>https://github.com/sebastienros/jint</PackageProjectUrl>
     <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
